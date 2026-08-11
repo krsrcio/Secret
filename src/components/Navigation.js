@@ -42,7 +42,7 @@ export function Header({
 export function BottomNav({ active, onNavigate, unread = 0, styles, colors }) {
   const items = [
     ["home", "home-outline", "home", "Home"],
-    ["discover", "compass-outline", "compass", "Discover"],
+    ["discover", "search-outline", "search", "Search"],
     ["notifications", "notifications-outline", "notifications", "Updates"],
     ["saved", "bookmark-outline", "bookmark", "Saved"],
   ];

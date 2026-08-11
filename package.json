@@ -16,6 +16,7 @@
     "expo": "^57.0.12",
     "expo-asset": "~57.0.10",
     "expo-audio": "~57.0.3",
+    "expo-blur": "~57.0.2",
     "expo-font": "~57.0.1",
     "expo-haptics": "~57.0.1",
     "expo-image-picker": "~57.0.9",

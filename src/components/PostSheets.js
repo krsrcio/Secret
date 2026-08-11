@@ -13,6 +13,7 @@ import {
 import { Avatar } from "./Avatar";
 import { Empty, Icon } from "./Ui";
 import { MediaAttachments } from "./MediaAttachments";
+import { SheetEntrance } from "./Motion";
 import { VoiceMessage } from "./VoiceMessage";
 import { formatRelativeTime } from "../utils/formatDate";
 import { formatDuration } from "../utils/formatDuration";
@@ -63,13 +64,13 @@ function ReplySheetContent({
     }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={close}>
+    <Modal visible transparent animationType="fade" onRequestClose={close}>
       <View style={styles.overlay}>
         <Pressable style={styles.dismiss} onPress={close} />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.sheet}>
+          <SheetEntrance style={styles.sheet}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Responses</Text>
@@ -170,7 +171,7 @@ function ReplySheetContent({
                 </Pressable>
               </View>
             </View>
-          </View>
+          </SheetEntrance>
         </KeyboardAvoidingView>
       </View>
     </Modal>
@@ -202,13 +203,13 @@ function PostEditorContent({ post, onClose, onSave, onPickPhoto, onError, styles
     if (selected) setImageUrl(selected);
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.dismiss} onPress={onClose} />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.editorSheet}>
+          <SheetEntrance style={styles.editorSheet}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Edit post</Text>
@@ -270,7 +271,7 @@ function PostEditorContent({ post, onClose, onSave, onPickPhoto, onError, styles
                 <Text style={styles.smallButtonText}>Save changes</Text>
               </Pressable>
             </View>
-          </View>
+          </SheetEntrance>
         </KeyboardAvoidingView>
       </View>
     </Modal>

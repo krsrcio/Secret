@@ -8,8 +8,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import { Brand } from "../components/Brand";
-import { Icon, InlineError, Tag } from "../components/Ui";
+import { Icon, InlineError } from "../components/Ui";
 import { validateCredentials } from "../utils/validation";
 
 export function AuthScreen({ error, onLogin, onRegister, styles, colors }) {
@@ -27,6 +28,7 @@ export function AuthScreen({ error, onLogin, onRegister, styles, colors }) {
     register,
   });
   const valid = !validationError;
+  const isDarkTheme = colors.page === "#15121B";
   const submit = () =>
     register
       ? onRegister({ username: username.trim(), email: email.trim(), password })
@@ -40,11 +42,22 @@ export function AuthScreen({ error, onLogin, onRegister, styles, colors }) {
         contentContainerStyle={styles.authScroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Brand styles={styles} />
-        <View style={styles.authCard}>
-          <Tag styles={styles}>
-            {register ? "CREATE YOUR SPACE" : "WELCOME TO SECRET"}
-          </Tag>
+        <Brand compact style={styles.authWordmark} styles={styles} />
+        <BlurView
+          intensity={24}
+          tint={isDarkTheme ? "dark" : "light"}
+          style={[
+            styles.authGlass,
+            {
+              backgroundColor: isDarkTheme
+                ? "rgba(33, 29, 41, 0.68)"
+                : "rgba(255, 255, 255, 0.58)",
+              borderColor: isDarkTheme
+                ? "rgba(255, 255, 255, 0.14)"
+                : "rgba(255, 255, 255, 0.72)",
+            },
+          ]}
+        >
           <Text style={styles.authTitle}>
             {register
               ? "Join the conversation."
@@ -120,7 +133,7 @@ export function AuthScreen({ error, onLogin, onRegister, styles, colors }) {
               style={styles.buttonEnd}
             />
           </Pressable>
-        </View>
+        </BlurView>
         <Text style={styles.authFooter}>
           {register ? "Already a member?" : "New to Secret?"}{" "}
           <Text

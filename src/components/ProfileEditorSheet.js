@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Ui";
+import { SheetEntrance } from "./Motion";
 
 export function ProfileEditorSheet({ user, onClose, onSave, onPickPhoto, styles, colors }) {
   if (!user) return null;
@@ -31,11 +32,11 @@ function ProfileEditorContent({ user, onClose, onSave, onPickPhoto, styles, colo
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.dismiss} onPress={onClose} />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.editorSheet}>
+          <SheetEntrance style={styles.editorSheet}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Edit profile</Text>
@@ -61,7 +62,7 @@ function ProfileEditorContent({ user, onClose, onSave, onPickPhoto, styles, colo
                 <Text style={styles.smallButtonText}>Save profile</Text>
               </Pressable>
             </View>
-          </View>
+          </SheetEntrance>
         </KeyboardAvoidingView>
       </View>
     </Modal>
