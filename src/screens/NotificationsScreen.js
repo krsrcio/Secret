@@ -17,6 +17,7 @@ export function NotificationsScreen({
   data,
   onNavigate,
   onOpenProfile,
+  onOpenNotification,
   onSettings,
   onReadAll,
   onRefresh,
@@ -63,7 +64,7 @@ export function NotificationsScreen({
               return (
                 <Pressable
                   key={String(item.id || index)}
-                  onPress={() => onOpenProfile(actor)}
+                  onPress={() => onOpenNotification ? onOpenNotification(item) : onOpenProfile(actor)}
                   style={[
                     styles.notification,
                     index < data.notifications.length - 1 && styles.divider,

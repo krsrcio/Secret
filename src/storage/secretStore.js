@@ -209,13 +209,15 @@ function buildTrends(posts) {
     .map(([tag, postCount]) => ({ id: tag, tag, postCount }));
 }
 
-function createNotification(database, userId, actorId, message) {
+function createNotification(database, userId, actorId, message, details = {}) {
   if (!userId || userId === actorId) return;
   database.notifications.unshift({
     id: makeId('notification'),
     userId,
     actorId,
     message,
+    type: details.type || 'profile',
+    postId: details.postId || null,
     createdAt: new Date().toISOString(),
     read: false,
   });
@@ -400,7 +402,7 @@ export const store = {
         ...response,
         createdAt: new Date().toISOString(),
       }];
-      createNotification(database, post.authorId, userId, 'replied to your question.');
+      createNotification(database, post.authorId, userId, 'replied to your question.', { type: 'response', postId: post.id });
       await writeDatabase(database);
     });
   },
@@ -427,7 +429,7 @@ export const store = {
       const following = asArray(viewer.followingIds);
       const nowFollowing = !following.includes(targetUserId);
       viewer.followingIds = nowFollowing ? [...following, targetUserId] : following.filter((id) => id !== targetUserId);
-      if (nowFollowing) createNotification(database, targetUserId, viewerId, 'started following you.');
+      if (nowFollowing) createNotification(database, targetUserId, viewerId, 'started following you.', { type: 'follow' });
       await writeDatabase(database);
     });
     return store.getProfile(viewerId, targetUserId);
@@ -438,6 +440,19 @@ export const store = {
       const database = await readDatabase();
       requireUser(database, userId);
       database.notifications = database.notifications.map((notification) => notification.userId === userId ? { ...notification, read: true } : notification);
+      await writeDatabase(database);
+    });
+  },
+
+  markNotificationRead(userId, notificationId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      database.notifications = database.notifications.map((notification) => (
+        notification.userId === userId && notification.id === notificationId
+          ? { ...notification, read: true }
+          : notification
+      ));
       await writeDatabase(database);
     });
   },

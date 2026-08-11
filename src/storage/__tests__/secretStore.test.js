@@ -115,6 +115,20 @@ describe('local store', () => {
     });
   });
 
+  it('links reply notifications to their post and can mark one as read', async () => {
+    const ownerId = await createUser('owner-notification');
+    const responderId = await createUser('responder-notification');
+    await store.createPost(ownerId, 'Tell me something good.');
+    const post = (await store.getBootstrap(ownerId)).posts[0];
+
+    await store.createResponse(responderId, post.id, 'A good reply.');
+    const notification = (await store.getBootstrap(ownerId)).notifications[0];
+    expect(notification).toMatchObject({ postId: post.id, type: 'response', read: false });
+
+    await store.markNotificationRead(ownerId, notification.id);
+    expect((await store.getBootstrap(ownerId)).notifications[0].read).toBe(true);
+  });
+
   it('saves and clears a local post draft', async () => {
     const userId = await createUser('drafter');
     await store.savePostDraft(userId, { question: 'Finish this later', imageUrl: 'file:///draft.jpg' });

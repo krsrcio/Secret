@@ -100,6 +100,7 @@ function AppContent() {
           data={app.data}
           onNavigate={app.setScreen}
           onOpenProfile={app.openProfile}
+          onOpenNotification={app.openNotification}
           onSettings={() => app.setScreen("settings")}
           onReadAll={app.readAll}
           onRefresh={app.reload}

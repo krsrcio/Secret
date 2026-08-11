@@ -193,6 +193,24 @@ export function useAppController() {
   const reload = () => execute(() => refresh(token));
   const favorite = (postId) => execute(async () => { await store.toggleFavorite(token, postId); await refresh(token); confirmAction(); });
   const readAll = () => execute(async () => { await store.markNotificationsRead(token); await refresh(token); });
+  const openNotification = async (notification) => {
+    if (!notification) return;
+    const post = notification.postId
+      ? data.posts.find((item) => String(item.id) === String(notification.postId))
+      : null;
+    if (!notification.read) {
+      await execute(async () => {
+        await store.markNotificationRead(token, notification.id);
+        await refresh(token);
+      });
+    }
+    if (post) {
+      setSelectedPost(post);
+      return;
+    }
+    const actor = notification.actor || notification.user || notification.author;
+    if (actor) await openProfile(actor);
+  };
   const updatePreferences = (changes) => execute(async () => { await store.updatePreferences(token, changes); await refresh(token); confirmAction(); });
   const follow = () => execute(async () => {
     const id = idOf(profile?.user);
@@ -260,6 +278,7 @@ export function useAppController() {
     reload,
     favorite,
     readAll,
+    openNotification,
     updatePreferences,
     follow,
     toggleMute,

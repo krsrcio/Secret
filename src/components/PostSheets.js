@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +13,7 @@ import { Avatar } from "./Avatar";
 import { Empty, Icon } from "./Ui";
 import { MediaAttachments } from "./MediaAttachments";
 import { SheetEntrance } from "./Motion";
+import { ExpandableImage } from "./PhotoViewer";
 import { VoiceMessage } from "./VoiceMessage";
 import { formatRelativeTime } from "../utils/formatDate";
 import { formatDuration } from "../utils/formatDuration";
@@ -85,13 +85,7 @@ function ReplySheetContent({
                 {!!postText(post) && (
                   <Text style={styles.questionText}>{postText(post)}</Text>
                 )}
-                {!!post.imageUrl && (
-                  <Image
-                    source={{ uri: post.imageUrl }}
-                    style={styles.questionImage}
-                    resizeMode="cover"
-                  />
-                )}
+                {!!post.imageUrl && <ExpandableImage uri={post.imageUrl} style={styles.questionImage} styles={styles} colors={colors} />}
                 {!!post.audioUrl && (
                   <VoiceMessage
                     uri={post.audioUrl}

@@ -288,6 +288,11 @@ export const createStyles = (textScale = 1) =>
       backgroundColor: colors.lavender,
       marginTop: 14,
     },
+    photoViewerOverlay: { flex: 1, backgroundColor: "rgba(13, 10, 20, 0.97)" },
+    photoViewerToolbar: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 18 },
+    photoViewerControl: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
+    photoViewerImageArea: { flex: 1, alignItems: "center", justifyContent: "center", padding: 18 },
+    photoViewerImage: { width: "100%", height: "100%" },
     postActions: {
       flexDirection: "row",
       justifyContent: "space-between",
