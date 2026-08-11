@@ -216,6 +216,8 @@ For code review, prioritize confirmed findings over style opinions.
 
 Add the project's durable stack, architecture, design, and command rules below this line.
 
+Prefer small, focused, reusable components over large monolithic files. Separate components, hooks, services, utilities, types, and business logic based on responsibility to keep the codebase clean and maintainable.
+
 <!--
 Example:
 
