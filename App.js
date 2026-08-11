@@ -26,7 +26,7 @@ export default function App() {
 
   return <SafeAreaView style={styles.app}>
     <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.page} />
-    {app.screen === 'home' && <HomeScreen data={app.data} onNavigate={app.setScreen} onOpenPost={app.setSelectedPost} onOpenProfile={app.openProfile} onCreatePost={app.createPost} onFavorite={app.favorite} onEditPost={app.setEditingPost} onDeletePost={app.deletePost} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
+    {app.screen === 'home' && <HomeScreen data={app.data} onNavigate={app.setScreen} onOpenPost={app.setSelectedPost} onOpenProfile={app.openProfile} onCreatePost={app.createPost} onPickPostImage={app.pickPostImage} onFavorite={app.favorite} onEditPost={app.setEditingPost} onDeletePost={app.deletePost} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'discover' && <DiscoverScreen data={app.data} onNavigate={app.setScreen} onOpenProfile={app.openProfile} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'notifications' && <NotificationsScreen data={app.data} onNavigate={app.setScreen} onOpenProfile={app.openProfile} onSettings={() => app.setScreen('settings')} onReadAll={app.readAll} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'settings' && <SettingsScreen currentUser={app.data.currentUser} preferences={app.data.preferences} onUpdate={app.updatePreferences} onBack={() => app.setScreen('home')} onPickAvatar={app.pickAvatar} onResetData={app.resetLocalData} onSignOut={app.signOut} styles={styles} colors={colors} />}

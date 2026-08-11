@@ -5,7 +5,7 @@ const SESSION_KEY = '@secret/current-user';
 const MAX_USERNAME_LENGTH = 30;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_CONTENT_LENGTH = 220;
-const MAX_AVATAR_URL_LENGTH = 2048;
+const MAX_IMAGE_URL_LENGTH = 2048;
 const allowedPreferenceKeys = new Set(['darkMode', 'privateProfile']);
 
 const makeEmptyDatabase = () => ({
@@ -46,6 +46,23 @@ function validatedContent(value, label) {
   if (!text) throw new Error(`${label} cannot be empty.`);
   if (text.length > MAX_CONTENT_LENGTH) throw new Error(`${label} can be at most ${MAX_CONTENT_LENGTH} characters.`);
   return text;
+}
+
+function optionalImageUrl(value, label) {
+  if (value === null || value === undefined || value === '') return null;
+  const imageUrl = typeof value === 'string' ? value.trim() : '';
+  if (!imageUrl || imageUrl.length > MAX_IMAGE_URL_LENGTH || !/^(?:file|content|https?):\/\/|^blob:/i.test(imageUrl)) {
+    throw new Error(`Choose a valid ${label}.`);
+  }
+  return imageUrl;
+}
+
+function validatedPost(question, imageUrl) {
+  const text = String(question || '').trim();
+  const safeImageUrl = optionalImageUrl(imageUrl, 'post photo');
+  if (!text && !safeImageUrl) throw new Error('A post needs text or a photo.');
+  if (text.length > MAX_CONTENT_LENGTH) throw new Error(`A post can be at most ${MAX_CONTENT_LENGTH} characters.`);
+  return { text, imageUrl: safeImageUrl };
 }
 
 function requireUser(database, userId) {
@@ -233,14 +250,16 @@ export const store = {
     return profileData(database, viewerId, targetUserId);
   },
 
-  createPost(userId, question) {
+  createPost(userId, question, imageUrl = null) {
     return enqueueMutation(async () => {
       const database = await readDatabase();
       requireUser(database, userId);
+      const post = validatedPost(question, imageUrl);
       database.posts.unshift({
         id: makeId('post'),
         authorId: userId,
-        question: validatedContent(question, 'A post'),
+        question: post.text,
+        imageUrl: post.imageUrl,
         createdAt: new Date().toISOString(),
         responses: [],
         favoriteUserIds: [],
@@ -342,10 +361,7 @@ export const store = {
       const database = await readDatabase();
       const user = requireUser(database, userId);
       const avatarUrl = typeof changes?.avatarUrl === 'string' ? changes.avatarUrl.trim() : '';
-      if (!avatarUrl || avatarUrl.length > MAX_AVATAR_URL_LENGTH || !/^(?:file|content|https?):\/\/|^blob:/i.test(avatarUrl)) {
-        throw new Error('Choose a valid profile photo.');
-      }
-      user.avatarUrl = avatarUrl;
+      user.avatarUrl = optionalImageUrl(avatarUrl, 'profile photo');
       await writeDatabase(database);
     });
   },

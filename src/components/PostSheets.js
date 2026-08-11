@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -47,7 +48,16 @@ export function ReplySheet({
               <Avatar person={author} size={35} />
               <View style={[styles.flex, styles.questionCopy]}>
                 <Text style={styles.postName}>{nameOf(author)}</Text>
-                <Text style={styles.questionText}>{postText(post)}</Text>
+                {!!postText(post) && (
+                  <Text style={styles.questionText}>{postText(post)}</Text>
+                )}
+                {!!post.imageUrl && (
+                  <Image
+                    source={{ uri: post.imageUrl }}
+                    style={styles.questionImage}
+                    resizeMode="cover"
+                  />
+                )}
               </View>
             </View>
             <ScrollView

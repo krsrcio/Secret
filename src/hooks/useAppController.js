@@ -64,9 +64,10 @@ export function useAppController() {
     }
   };
 
-  const createPost = async (question) => {
-    if (!question.trim()) return false;
-    return (await execute(async () => { await store.createPost(token, question.trim()); await refresh(token); })) !== null;
+  const createPost = async ({ question, imageUrl } = {}) => {
+    const text = String(question || '').trim();
+    if (!text && !imageUrl) return false;
+    return (await execute(async () => { await store.createPost(token, text, imageUrl); await refresh(token); })) !== null;
   };
 
   const createResponse = async (postId, text) => {
@@ -126,6 +127,17 @@ export function useAppController() {
     }
   });
 
+  const pickPostImage = () => execute(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) throw new Error('Photo library permission is needed to add a post photo.');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    return result.canceled ? null : result.assets?.[0]?.uri || null;
+  });
+
   const resetLocalData = () => Alert.alert('Delete all local data?', 'This permanently removes every account, post, reply, and setting saved on this device.', [
     { text: 'Cancel', style: 'cancel' },
     {
@@ -183,6 +195,7 @@ export function useAppController() {
     deletePost,
     openProfile,
     pickAvatar,
+    pickPostImage,
     resetLocalData,
     signOut,
     reload,

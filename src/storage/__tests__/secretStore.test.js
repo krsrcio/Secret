@@ -59,4 +59,12 @@ describe('local store', () => {
     await store.updateProfile(userId, { avatarUrl: 'file:///profile-photo.jpg' });
     await expect(store.updateProfile(userId, { avatarUrl: 'javascript:alert(1)' })).rejects.toThrow(/valid profile photo/i);
   });
+
+  it('persists an optional photo with a photo-only post', async () => {
+    const userId = await createUser('photographer');
+    await store.createPost(userId, '', 'file:///post-photo.jpg');
+
+    const data = await store.getBootstrap(userId);
+    expect(data.posts[0]).toMatchObject({ question: '', imageUrl: 'file:///post-photo.jpg' });
+  });
 });
