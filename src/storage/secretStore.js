@@ -2,23 +2,73 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DATABASE_KEY = '@secret/local-database';
 const SESSION_KEY = '@secret/current-user';
-const emptyDatabase = {
+const MAX_USERNAME_LENGTH = 30;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_CONTENT_LENGTH = 220;
+const MAX_AVATAR_URL_LENGTH = 2048;
+const allowedPreferenceKeys = new Set(['darkMode', 'privateProfile']);
+
+const makeEmptyDatabase = () => ({
   users: [],
   posts: [],
   notifications: [],
   preferences: {},
-};
+});
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+// AsyncStorage does not offer transactions. Queue writes so rapid taps cannot
+// cause two read-modify-write operations to overwrite one another.
+let mutationQueue = Promise.resolve();
+function enqueueMutation(operation) {
+  const result = mutationQueue.then(operation, operation);
+  mutationQueue = result.catch(() => undefined);
+  return result;
+}
+
+function normalizedUsername(value) {
+  const username = String(value || '').trim().toLowerCase();
+  if (!username) throw new Error('Enter a username.');
+  if (username.length > MAX_USERNAME_LENGTH) throw new Error(`Usernames can be at most ${MAX_USERNAME_LENGTH} characters.`);
+  if (!/^[a-z0-9._-]+$/.test(username)) throw new Error('Usernames may use letters, numbers, periods, underscores, and hyphens only.');
+  return username;
+}
+
+function normalizedEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email) || email.length > MAX_EMAIL_LENGTH) throw new Error('Enter a valid email address.');
+  return email;
+}
+
+function validatedContent(value, label) {
+  const text = String(value || '').trim();
+  if (!text) throw new Error(`${label} cannot be empty.`);
+  if (text.length > MAX_CONTENT_LENGTH) throw new Error(`${label} can be at most ${MAX_CONTENT_LENGTH} characters.`);
+  return text;
+}
+
+function requireUser(database, userId) {
+  const user = database.users.find((item) => item.id === userId);
+  if (!user) throw new Error('Your local account is no longer available. Please sign in again.');
+  return user;
+}
+
+function canViewerSeeContent(database, targetUserId, viewerId) {
+  if (targetUserId === viewerId) return true;
+  const preferences = database.preferences[targetUserId] || {};
+  if (!preferences.privateProfile) return true;
+  const viewer = database.users.find((user) => user.id === viewerId);
+  return asArray(viewer?.followingIds).includes(targetUserId);
+}
+
 async function readDatabase() {
   const saved = await AsyncStorage.getItem(DATABASE_KEY);
-  if (!saved) return { ...emptyDatabase };
+  if (!saved) return makeEmptyDatabase();
   try {
     const parsed = JSON.parse(saved);
     return {
-      ...emptyDatabase,
+      ...makeEmptyDatabase(),
       ...parsed,
       users: asArray(parsed.users),
       posts: asArray(parsed.posts),
@@ -26,7 +76,7 @@ async function readDatabase() {
       preferences: parsed.preferences || {},
     };
   } catch {
-    return { ...emptyDatabase };
+    throw new Error('Your saved local data could not be read. Clear local app data to start again.');
   }
 }
 
@@ -37,6 +87,7 @@ function publicUser(database, user, viewerId) {
   const followingIds = asArray(user.followingIds);
   const viewerFollowingIds = asArray(database.users.find((item) => item.id === viewerId)?.followingIds);
   const followersCount = database.users.filter((item) => asArray(item.followingIds).includes(user.id)).length;
+  const isPrivate = Boolean(database.preferences[user.id]?.privateProfile);
   return {
     id: user.id,
     username: user.username,
@@ -50,6 +101,8 @@ function publicUser(database, user, viewerId) {
     postCount: database.posts.filter((post) => post.authorId === user.id).length,
     isFollowing: viewerId ? viewerFollowingIds.includes(user.id) : false,
     viewerIsFollowing: viewerId ? viewerFollowingIds.includes(user.id) : false,
+    isPrivate,
+    canViewContent: canViewerSeeContent(database, user.id, viewerId),
   };
 }
 
@@ -61,7 +114,9 @@ function publicResponse(database, response, viewerId) {
 }
 
 function publicPost(database, post, viewerId) {
-  const responses = asArray(post.responses).map((response) => publicResponse(database, response, viewerId));
+  const responses = asArray(post.responses)
+    .filter((response) => canViewerSeeContent(database, response.authorId, viewerId))
+    .map((response) => publicResponse(database, response, viewerId));
   return {
     ...post,
     author: publicUser(database, database.users.find((user) => user.id === post.authorId), viewerId),
@@ -82,7 +137,7 @@ function buildTrends(posts) {
     .map(([tag, postCount]) => ({ id: tag, tag, postCount }));
 }
 
-async function createNotification(database, userId, actorId, message) {
+function createNotification(database, userId, actorId, message) {
   if (!userId || userId === actorId) return;
   database.notifications.unshift({
     id: makeId('notification'),
@@ -94,11 +149,22 @@ async function createNotification(database, userId, actorId, message) {
   });
 }
 
+function profileData(database, viewerId, targetUserId) {
+  const user = database.users.find((item) => item.id === targetUserId);
+  if (!user) throw new Error('This profile is no longer available.');
+  const canViewContent = canViewerSeeContent(database, targetUserId, viewerId);
+  if (!canViewContent) return { user: publicUser(database, user, viewerId), posts: [], answers: [], favorites: [] };
+  const posts = database.posts.filter((post) => post.authorId === targetUserId).map((post) => publicPost(database, post, viewerId));
+  const answers = database.posts.filter((post) => asArray(post.responses).some((response) => response.authorId === targetUserId)).map((post) => publicPost(database, post, viewerId));
+  const favorites = database.posts.filter((post) => asArray(post.favoriteUserIds).includes(targetUserId)).map((post) => publicPost(database, post, viewerId));
+  return { user: publicUser(database, user, viewerId), posts, answers, favorites };
+}
+
 async function bootstrap(userId) {
   const database = await readDatabase();
-  const currentUser = database.users.find((user) => user.id === userId);
-  if (!currentUser) throw new Error('Your local session is no longer available. Please sign in again.');
-  const posts = [...database.posts]
+  const currentUser = requireUser(database, userId);
+  const visiblePosts = database.posts.filter((post) => canViewerSeeContent(database, post.authorId, userId));
+  const posts = [...visiblePosts]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .map((post) => publicPost(database, post, userId));
   const notifications = database.notifications
@@ -107,11 +173,14 @@ async function bootstrap(userId) {
       ...notification,
       actor: publicUser(database, database.users.find((user) => user.id === notification.actorId), userId),
     }));
+  const currentFollowing = asArray(currentUser.followingIds);
   return {
     currentUser: publicUser(database, currentUser, userId),
     posts,
-    trends: buildTrends(database.posts),
-    suggestions: database.users.filter((user) => user.id !== userId).map((user) => publicUser(database, user, userId)),
+    trends: buildTrends(visiblePosts),
+    suggestions: database.users
+      .filter((user) => user.id !== userId && !currentFollowing.includes(user.id))
+      .map((user) => publicUser(database, user, userId)),
     notifications,
     preferences: database.preferences[userId] || {},
     unreadNotificationCount: notifications.filter((notification) => !notification.read).length,
@@ -125,30 +194,33 @@ export const session = {
 };
 
 export const store = {
-  async register({ username, email, password }) {
-    const database = await readDatabase();
-    const normalizedUsername = username.trim().toLowerCase();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (database.users.some((user) => user.username.toLowerCase() === normalizedUsername || user.email.toLowerCase() === normalizedEmail)) {
-      throw new Error('An account with that username or email already exists on this device.');
-    }
-    const user = {
-      id: makeId('user'),
-      username: normalizedUsername,
-      name: username.trim(),
-      email: normalizedEmail,
-      password,
-      followingIds: [],
-      createdAt: new Date().toISOString(),
-    };
-    database.users.push(user);
-    await writeDatabase(database);
-    return user.id;
+  register({ username, email, password }) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      const usernameValue = normalizedUsername(username);
+      const emailValue = normalizedEmail(email);
+      if (typeof password !== 'string' || password.length < 4) throw new Error('Use at least 4 characters for your password.');
+      if (database.users.some((user) => user.username.toLowerCase() === usernameValue || user.email.toLowerCase() === emailValue)) {
+        throw new Error('An account with that username or email already exists on this device.');
+      }
+      const user = {
+        id: makeId('user'),
+        username: usernameValue,
+        name: usernameValue,
+        email: emailValue,
+        password,
+        followingIds: [],
+        createdAt: new Date().toISOString(),
+      };
+      database.users.push(user);
+      await writeDatabase(database);
+      return user.id;
+    });
   },
 
   async login({ username, password }) {
     const database = await readDatabase();
-    const identity = username.trim().toLowerCase();
+    const identity = String(username || '').trim().toLowerCase();
     const user = database.users.find((item) => (item.username.toLowerCase() === identity || item.email.toLowerCase() === identity) && item.password === password);
     if (!user) throw new Error('We could not find a matching local account.');
     return user.id;
@@ -158,67 +230,127 @@ export const store = {
 
   async getProfile(viewerId, targetUserId) {
     const database = await readDatabase();
-    const user = database.users.find((item) => item.id === targetUserId);
-    if (!user) throw new Error('This profile is no longer available.');
-    const posts = database.posts.filter((post) => post.authorId === targetUserId).map((post) => publicPost(database, post, viewerId));
-    const answers = database.posts.filter((post) => asArray(post.responses).some((response) => response.authorId === targetUserId)).map((post) => publicPost(database, post, viewerId));
-    const favorites = database.posts.filter((post) => asArray(post.favoriteUserIds).includes(targetUserId)).map((post) => publicPost(database, post, viewerId));
-    return { user: publicUser(database, user, viewerId), posts, answers, favorites };
+    return profileData(database, viewerId, targetUserId);
   },
 
-  async createPost(userId, question) {
-    const database = await readDatabase();
-    database.posts.unshift({
-      id: makeId('post'),
-      authorId: userId,
-      question,
-      createdAt: new Date().toISOString(),
-      responses: [],
-      favoriteUserIds: [],
+  createPost(userId, question) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      database.posts.unshift({
+        id: makeId('post'),
+        authorId: userId,
+        question: validatedContent(question, 'A post'),
+        createdAt: new Date().toISOString(),
+        responses: [],
+        favoriteUserIds: [],
+      });
+      await writeDatabase(database);
     });
-    await writeDatabase(database);
   },
 
-  async createResponse(userId, postId, text) {
-    const database = await readDatabase();
-    const post = database.posts.find((item) => item.id === postId);
-    if (!post) throw new Error('This conversation is no longer available.');
-    post.responses = [...asArray(post.responses), { id: makeId('response'), authorId: userId, text, createdAt: new Date().toISOString() }];
-    await createNotification(database, post.authorId, userId, 'replied to your question.');
-    await writeDatabase(database);
+  updatePost(userId, postId, question) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const post = database.posts.find((item) => item.id === postId);
+      if (!post || post.authorId !== userId) throw new Error('You can only edit your own posts.');
+      post.question = validatedContent(question, 'A post');
+      post.updatedAt = new Date().toISOString();
+      await writeDatabase(database);
+    });
   },
 
-  async toggleFavorite(userId, postId) {
-    const database = await readDatabase();
-    const post = database.posts.find((item) => item.id === postId);
-    if (!post) throw new Error('This conversation is no longer available.');
-    const ids = asArray(post.favoriteUserIds);
-    post.favoriteUserIds = ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId];
-    await writeDatabase(database);
+  deletePost(userId, postId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const post = database.posts.find((item) => item.id === postId);
+      if (!post || post.authorId !== userId) throw new Error('You can only delete your own posts.');
+      database.posts = database.posts.filter((item) => item.id !== postId);
+      await writeDatabase(database);
+    });
+  },
+
+  createResponse(userId, postId, text) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const post = database.posts.find((item) => item.id === postId);
+      if (!post) throw new Error('This conversation is no longer available.');
+      post.responses = [...asArray(post.responses), {
+        id: makeId('response'),
+        authorId: userId,
+        text: validatedContent(text, 'A response'),
+        createdAt: new Date().toISOString(),
+      }];
+      createNotification(database, post.authorId, userId, 'replied to your question.');
+      await writeDatabase(database);
+    });
+  },
+
+  toggleFavorite(userId, postId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const post = database.posts.find((item) => item.id === postId);
+      if (!post) throw new Error('This conversation is no longer available.');
+      const ids = asArray(post.favoriteUserIds);
+      post.favoriteUserIds = ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId];
+      await writeDatabase(database);
+    });
   },
 
   async toggleFollow(viewerId, targetUserId) {
-    const database = await readDatabase();
-    const viewer = database.users.find((item) => item.id === viewerId);
-    const target = database.users.find((item) => item.id === targetUserId);
-    if (!viewer || !target) throw new Error('This profile is no longer available.');
-    const following = asArray(viewer.followingIds);
-    const nowFollowing = !following.includes(targetUserId);
-    viewer.followingIds = nowFollowing ? [...following, targetUserId] : following.filter((id) => id !== targetUserId);
-    if (nowFollowing) await createNotification(database, targetUserId, viewerId, 'started following you.');
-    await writeDatabase(database);
+    await enqueueMutation(async () => {
+      const database = await readDatabase();
+      const viewer = requireUser(database, viewerId);
+      const target = database.users.find((item) => item.id === targetUserId);
+      if (!target) throw new Error('This profile is no longer available.');
+      if (viewer.id === target.id) throw new Error('You cannot follow your own profile.');
+      const following = asArray(viewer.followingIds);
+      const nowFollowing = !following.includes(targetUserId);
+      viewer.followingIds = nowFollowing ? [...following, targetUserId] : following.filter((id) => id !== targetUserId);
+      if (nowFollowing) createNotification(database, targetUserId, viewerId, 'started following you.');
+      await writeDatabase(database);
+    });
     return store.getProfile(viewerId, targetUserId);
   },
 
-  async markNotificationsRead(userId) {
-    const database = await readDatabase();
-    database.notifications = database.notifications.map((notification) => notification.userId === userId ? { ...notification, read: true } : notification);
-    await writeDatabase(database);
+  markNotificationsRead(userId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      database.notifications = database.notifications.map((notification) => notification.userId === userId ? { ...notification, read: true } : notification);
+      await writeDatabase(database);
+    });
   },
 
-  async updatePreferences(userId, changes) {
-    const database = await readDatabase();
-    database.preferences[userId] = { ...(database.preferences[userId] || {}), ...changes };
-    await writeDatabase(database);
+  updatePreferences(userId, changes) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const safeChanges = Object.fromEntries(Object.entries(changes || {}).filter(([key, value]) => allowedPreferenceKeys.has(key) && typeof value === 'boolean'));
+      if (!Object.keys(safeChanges).length) throw new Error('No valid preference changes were provided.');
+      database.preferences[userId] = { ...(database.preferences[userId] || {}), ...safeChanges };
+      await writeDatabase(database);
+    });
+  },
+
+  updateProfile(userId, changes) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      const user = requireUser(database, userId);
+      const avatarUrl = typeof changes?.avatarUrl === 'string' ? changes.avatarUrl.trim() : '';
+      if (!avatarUrl || avatarUrl.length > MAX_AVATAR_URL_LENGTH || !/^(?:file|content|https?):\/\/|^blob:/i.test(avatarUrl)) {
+        throw new Error('Choose a valid profile photo.');
+      }
+      user.avatarUrl = avatarUrl;
+      await writeDatabase(database);
+    });
+  },
+
+  clearAll() {
+    return enqueueMutation(() => AsyncStorage.multiRemove([DATABASE_KEY, SESSION_KEY]));
   },
 };

@@ -4,14 +4,20 @@
     "slug": "secret-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#D1CFE8"
       }
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Secret to use your photos for your profile picture."
+        }
+      ]
     ]
   }
 }
