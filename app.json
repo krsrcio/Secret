@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Secret",
+    "slug": "secret-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#D1CFE8"
+      }
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
