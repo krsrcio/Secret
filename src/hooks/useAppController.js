@@ -5,6 +5,7 @@ import { initialData } from '../constants/appData';
 import { session, store } from '../storage/secretStore';
 import { normalizeAppData, normalizeProfile } from '../utils/normalizeData';
 import { idOf } from '../utils/presentation';
+import { acknowledgeAction, confirmAction } from '../utils/feedback';
 
 export function useAppController() {
   const [phase, setPhase] = useState('loading');
@@ -14,6 +15,7 @@ export function useAppController() {
   const [profile, setProfile] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
   const [editingPost, setEditingPost] = useState(null);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async (activeToken) => {
@@ -67,7 +69,12 @@ export function useAppController() {
   const createPost = async ({ question, imageUrl, audioUrl, audioDurationMs } = {}) => {
     const text = String(question || '').trim();
     if (!text && !imageUrl && !audioUrl) return false;
-    return (await execute(async () => { await store.createPost(token, text, imageUrl, audioUrl, audioDurationMs); await refresh(token); })) !== null;
+    return (await execute(async () => {
+      await store.createPost(token, text, imageUrl, audioUrl, audioDurationMs);
+      await store.clearPostDraft(token);
+      await refresh(token);
+      acknowledgeAction();
+    })) !== null;
   };
 
   const createResponse = async (postId, { text, audioUrl, audioDurationMs } = {}) => {
@@ -81,14 +88,16 @@ export function useAppController() {
     })) !== null;
   };
 
-  const savePostEdit = async (postId, question) => {
-    if (!question.trim()) return false;
+  const savePostEdit = async (postId, changes = {}) => {
+    const text = String(changes.question || '').trim();
+    if (!text && !changes.imageUrl && !changes.audioUrl) return false;
     return (await execute(async () => {
-      await store.updatePost(token, postId, question.trim());
+      await store.updatePost(token, postId, { ...changes, question: text });
       const next = await refresh(token);
       const updated = next.posts.find((post) => String(post.id) === String(postId));
       if (updated && String(selectedPost?.id) === String(postId)) setSelectedPost(updated);
       setEditingPost(null);
+      acknowledgeAction();
     })) !== null;
   };
 
@@ -139,6 +148,27 @@ export function useAppController() {
     return result.canceled ? null : result.assets?.[0]?.uri || null;
   });
 
+  const pickProfileImage = () => execute(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) throw new Error('Photo library permission is needed to choose a profile picture.');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    return result.canceled ? null : result.assets?.[0]?.uri || null;
+  });
+
+  const savePostDraft = (draft) => execute(() => store.savePostDraft(token, draft));
+  const clearPostDraft = () => execute(() => store.clearPostDraft(token));
+  const saveProfile = async (changes) => (await execute(async () => {
+    await store.updateProfile(token, changes);
+    await refresh(token);
+    setEditingProfile(false);
+    acknowledgeAction();
+  })) !== null;
+
   const resetLocalData = () => Alert.alert('Delete all local data?', 'This permanently removes every account, post, reply, and setting saved on this device.', [
     { text: 'Cancel', style: 'cancel' },
     {
@@ -161,15 +191,37 @@ export function useAppController() {
   ]);
 
   const reload = () => execute(() => refresh(token));
-  const favorite = (postId) => execute(async () => { await store.toggleFavorite(token, postId); await refresh(token); });
+  const favorite = (postId) => execute(async () => { await store.toggleFavorite(token, postId); await refresh(token); confirmAction(); });
   const readAll = () => execute(async () => { await store.markNotificationsRead(token); await refresh(token); });
-  const updatePreferences = (changes) => execute(async () => { await store.updatePreferences(token, changes); await refresh(token); });
+  const updatePreferences = (changes) => execute(async () => { await store.updatePreferences(token, changes); await refresh(token); confirmAction(); });
   const follow = () => execute(async () => {
     const id = idOf(profile?.user);
     if (!id) return;
     const result = await store.toggleFollow(token, id);
     await refresh(token);
     setProfile(normalizeProfile(result, profile.user));
+    confirmAction();
+  });
+  const toggleMute = () => execute(async () => {
+    const id = idOf(profile?.user);
+    if (!id) return;
+    await store.toggleMute(token, id);
+    await refresh(token);
+    setProfile(normalizeProfile(await store.getProfile(token, id), profile.user));
+    confirmAction();
+  });
+  const toggleBlock = () => execute(async () => {
+    const id = idOf(profile?.user);
+    if (!id) return;
+    await store.toggleBlock(token, id);
+    await refresh(token);
+    setProfile(normalizeProfile(await store.getProfile(token, id), profile.user));
+    confirmAction();
+  });
+  const completeOnboarding = () => execute(async () => {
+    await store.completeOnboarding(token);
+    await refresh(token);
+    acknowledgeAction();
   });
 
   const login = (values) => authenticate(store.login, values);
@@ -185,6 +237,8 @@ export function useAppController() {
     setSelectedPost,
     editingPost,
     setEditingPost,
+    editingProfile,
+    setEditingProfile,
     error,
     setError,
     restore,
@@ -197,6 +251,10 @@ export function useAppController() {
     openProfile,
     pickAvatar,
     pickPostImage,
+    pickProfileImage,
+    savePostDraft,
+    clearPostDraft,
+    saveProfile,
     resetLocalData,
     signOut,
     reload,
@@ -204,5 +262,8 @@ export function useAppController() {
     readAll,
     updatePreferences,
     follow,
+    toggleMute,
+    toggleBlock,
+    completeOnboarding,
   };
 }

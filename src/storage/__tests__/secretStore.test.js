@@ -80,6 +80,26 @@ describe('local store', () => {
     });
   });
 
+  it('replaces post attachments during an edit', async () => {
+    const userId = await createUser('editor');
+    await store.createPost(userId, 'Original', 'file:///first.jpg', 'file:///first.m4a', 1000);
+    const post = (await store.getBootstrap(userId)).posts[0];
+
+    await store.updatePost(userId, post.id, {
+      question: 'Updated',
+      imageUrl: null,
+      audioUrl: 'file:///replacement.m4a',
+      audioDurationMs: 3600,
+    });
+
+    expect((await store.getBootstrap(userId)).posts[0]).toMatchObject({
+      question: 'Updated',
+      imageUrl: null,
+      audioUrl: 'file:///replacement.m4a',
+      audioDurationMs: 3600,
+    });
+  });
+
   it('persists a voice-only response', async () => {
     const userId = await createUser('speaker');
     await store.createPost(userId, 'Share an update');
@@ -92,6 +112,47 @@ describe('local store', () => {
       text: '',
       audioUrl: 'file:///voice-note.m4a',
       audioDurationMs: 4200,
+    });
+  });
+
+  it('saves and clears a local post draft', async () => {
+    const userId = await createUser('drafter');
+    await store.savePostDraft(userId, { question: 'Finish this later', imageUrl: 'file:///draft.jpg' });
+
+    await expect(store.getPostDraft(userId)).resolves.toMatchObject({
+      question: 'Finish this later',
+      imageUrl: 'file:///draft.jpg',
+    });
+
+    await store.clearPostDraft(userId);
+    await expect(store.getPostDraft(userId)).resolves.toBeNull();
+  });
+
+  it('hides muted profiles from the local feed', async () => {
+    const ownerId = await createUser('noisy');
+    const viewerId = await createUser('quiet');
+    await store.createPost(ownerId, 'A post to hide');
+
+    await store.toggleMute(viewerId, ownerId);
+    expect((await store.getBootstrap(viewerId)).posts).toHaveLength(0);
+
+    await store.toggleMute(viewerId, ownerId);
+    expect((await store.getBootstrap(viewerId)).posts).toHaveLength(1);
+  });
+
+  it('updates editable profile details locally', async () => {
+    const userId = await createUser('profile');
+    await store.updateProfile(userId, {
+      name: 'Profile Person',
+      bio: 'Building a local-first app.',
+      pronouns: 'they/them',
+    });
+
+    const data = await store.getBootstrap(userId);
+    expect(data.currentUser).toMatchObject({
+      name: 'Profile Person',
+      bio: 'Building a local-first app.',
+      pronouns: 'they/them',
     });
   });
 });

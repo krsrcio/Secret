@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { Image, Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Ui";
-import { VoiceMessage } from "./VoiceMessage";
+import { MediaAttachments } from "./MediaAttachments";
 import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
+import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { formatDuration } from "../utils/formatDuration";
 
 export function PostComposer({
@@ -12,11 +13,13 @@ export function PostComposer({
   onCreatePost,
   onPickPhoto,
   onError,
+  draft,
+  onSaveDraft,
   styles,
   colors,
 }) {
-  const [question, setQuestion] = useState("");
-  const [imageUrl, setImageUrl] = useState(null);
+  const [question, setQuestion] = useState(draft?.question || "");
+  const [imageUrl, setImageUrl] = useState(draft?.imageUrl || null);
   const {
     voiceUrl,
     voiceDurationMs,
@@ -24,8 +27,13 @@ export function PostComposer({
     recordingDurationMs,
     toggleRecording,
     discardVoice,
-  } = useVoiceRecorder(onError);
+  } = useVoiceRecorder(onError, draft);
   const canPost = Boolean(question.trim() || imageUrl || voiceUrl) && !isRecording;
+
+  useDraftAutosave(
+    { question, imageUrl, audioUrl: voiceUrl, audioDurationMs: voiceDurationMs },
+    onSaveDraft,
+  );
 
   const publish = async () => {
     if (await onCreatePost({ question, imageUrl, audioUrl: voiceUrl, audioDurationMs: voiceDurationMs })) {
@@ -55,45 +63,23 @@ export function PostComposer({
           placeholder="Ask what's on your mind..."
           placeholderTextColor={colors.muted}
         />
-        {!!imageUrl && (
-          <View style={styles.composerImageWrap}>
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.composerImage}
-              resizeMode="cover"
-            />
-            <Pressable
-              accessibilityLabel="Remove post photo"
-              onPress={() => setImageUrl(null)}
-              style={styles.composerImageRemove}
-            >
-              <Icon name="close" color={colors.white} size={16} />
-            </Pressable>
-          </View>
-        )}
+        <MediaAttachments
+          imageUrl={imageUrl}
+          audioUrl={voiceUrl}
+          audioDurationMs={voiceDurationMs}
+          onRemoveImage={() => setImageUrl(null)}
+          onRemoveAudio={discardVoice}
+          imageStyle={styles.composerImage}
+          wrapperStyle={styles.composerImageWrap}
+          styles={styles}
+          colors={colors}
+        />
         {isRecording && (
           <View style={styles.recordingIndicator}>
             <Icon name="mic" color={colors.danger} size={16} />
             <Text style={styles.recordingText}>
               Recording {formatDuration(recordingDurationMs)}
             </Text>
-          </View>
-        )}
-        {!!voiceUrl && (
-          <View style={styles.composerVoiceDraft}>
-            <VoiceMessage
-              uri={voiceUrl}
-              durationMs={voiceDurationMs}
-              styles={styles}
-              colors={colors}
-            />
-            <Pressable
-              accessibilityLabel="Remove post voice message"
-              onPress={discardVoice}
-              style={styles.voiceDiscard}
-            >
-              <Icon name="close" color={colors.purpleDark} size={17} />
-            </Pressable>
           </View>
         )}
         <View style={styles.composerFooter}>

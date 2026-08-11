@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Avatar } from "../components/Avatar";
 import { ProfileSkeleton } from "../components/LoadingSkeletons";
 import { Header } from "../components/Navigation";
 import { PostCard } from "../components/PostCard";
-import { Empty, Stat } from "../components/Ui";
+import { Empty, Icon, Stat } from "../components/Ui";
 import { idOf, nameOf } from "../utils/presentation";
 
 export function ProfileScreen({
@@ -12,6 +12,9 @@ export function ProfileScreen({
   currentUser,
   onBack,
   onFollow,
+  onMute,
+  onBlock,
+  onEditProfile,
   onOpenPost,
   onFavorite,
   onEditPost,
@@ -48,7 +51,16 @@ export function ProfileScreen({
                 <Text style={styles.profileName}>{nameOf(person)}</Text>
                 <Text style={styles.mutedSmall}>{person.pronouns || ""}</Text>
               </View>
-              {!self && (
+              {self ? (
+                <Pressable onPress={onEditProfile} style={styles.followButton}>
+                  <Text style={styles.followText}>Edit profile</Text>
+                </Pressable>
+              ) : person.isBlocked ? (
+                <Pressable onPress={onBlock} style={styles.followingButton}>
+                  <Text style={styles.followingText}>Blocked</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.profileActions}>
                 <Pressable
                   onPress={onFollow}
                   style={[
@@ -65,6 +77,18 @@ export function ProfileScreen({
                     {following ? "Following" : "Follow"}
                   </Text>
                 </Pressable>
+                <Pressable
+                  accessibilityLabel="Profile safety tools"
+                  onPress={() => Alert.alert("Profile tools", "These controls only affect this device.", [
+                    { text: person.isMuted ? "Unmute" : "Mute", onPress: onMute },
+                    { text: "Block", style: "destructive", onPress: onBlock },
+                    { text: "Cancel", style: "cancel" },
+                  ])}
+                  style={styles.profileTools}
+                >
+                  <Icon name="ellipsis-horizontal" color={colors.purpleDark} size={19} />
+                </Pressable>
+                </View>
               )}
             </View>
             {!!person.bio && <Text style={styles.bio}>{person.bio}</Text>}
@@ -140,7 +164,7 @@ export function ProfileScreen({
             ) : (
               <Empty
                 icon="lock-closed-outline"
-                text="Follow this private profile to see its activity."
+                text={person.isBlocked ? "You have blocked this profile on this device." : person.isMuted ? "You have muted this profile on this device." : "Follow this private profile to see its activity."}
                 styles={styles}
               />
             )}

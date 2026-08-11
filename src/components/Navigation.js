@@ -14,7 +14,7 @@ export function Header({
   return (
     <View style={styles.header}>
       {onBack ? (
-        <Pressable onPress={onBack} style={styles.headerIcon}>
+        <Pressable accessibilityLabel="Go back" onPress={onBack} style={styles.headerIcon}>
           <Icon name="chevron-back" color={colors.ink} size={23} />
         </Pressable>
       ) : (
@@ -22,7 +22,7 @@ export function Header({
       )}
       {title && <Text style={styles.headerTitle}>{title}</Text>}
       {onSettings ? (
-        <Pressable onPress={onSettings} style={styles.headerIcon}>
+        <Pressable accessibilityLabel="Open settings" onPress={onSettings} style={styles.headerIcon}>
           <Icon name="settings-outline" color={colors.ink} size={19} />
           {unread > 0 && (
             <View style={styles.badge}>
@@ -44,12 +44,16 @@ export function BottomNav({ active, onNavigate, unread = 0, styles, colors }) {
     ["home", "home-outline", "home", "Home"],
     ["discover", "compass-outline", "compass", "Discover"],
     ["notifications", "notifications-outline", "notifications", "Updates"],
+    ["saved", "bookmark-outline", "bookmark", "Saved"],
   ];
   return (
     <View style={styles.nav}>
       {items.map(([key, outline, solid, label]) => (
         <Pressable
           key={key}
+          accessibilityRole="tab"
+          accessibilityLabel={label}
+          accessibilityState={{ selected: active === key }}
           onPress={() => onNavigate(key)}
           style={styles.navItem}
         >

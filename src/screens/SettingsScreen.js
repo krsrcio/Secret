@@ -13,6 +13,7 @@ const preferenceRows = [
     "Only followers can see posts",
   ],
   ["darkMode", "moon-outline", "Dark mode", "Use your preferred appearance"],
+  ["largeText", "text-outline", "Larger text", "Make reading more comfortable"],
 ];
 
 export function SettingsScreen({
@@ -20,7 +21,7 @@ export function SettingsScreen({
   preferences,
   onUpdate,
   onBack,
-  onPickAvatar,
+  onEditProfile,
   onResetData,
   onSignOut,
   styles,
@@ -39,9 +40,9 @@ export function SettingsScreen({
         showsVerticalScrollIndicator={false}
       >
         <Pressable
-          accessibilityLabel="Choose a profile photo"
-          onPress={onPickAvatar}
-          style={styles.settingsProfile}
+          accessibilityLabel="Edit profile"
+          onPress={onEditProfile}
+          style={({ pressed }) => [styles.settingsProfile, pressed && styles.pressed]}
         >
           <Avatar person={currentUser} size={58} />
           <View style={[styles.flex, styles.personCopy]}>
@@ -52,7 +53,10 @@ export function SettingsScreen({
                 : currentUser?.email || ""}
             </Text>
           </View>
-          <Icon name="camera-outline" color={colors.purple} size={21} />
+          <View style={styles.settingsProfileAction}>
+            <Text style={styles.settingsProfileActionText}>Edit</Text>
+            <Icon name="create-outline" color={colors.purple} size={17} />
+          </View>
         </Pressable>
         <Text style={styles.groupLabel}>PREFERENCES</Text>
         <View style={styles.card}>
@@ -82,29 +86,12 @@ export function SettingsScreen({
             </View>
           ))}
         </View>
-        <Text style={styles.groupLabel}>SUPPORT</Text>
-        <View style={styles.card}>
-          <StaticSetting
-            icon="mail-outline"
-            title="Email notifications"
-            detail="Available when an email service is connected"
-            styles={styles}
-            colors={colors}
-          />
-          <StaticSetting
-            icon="help-circle-outline"
-            title="Help center"
-            detail="Get answers and contact support"
-            styles={styles}
-            colors={colors}
-          />
-          <StaticSetting
-            icon="information-circle-outline"
-            title="About Secret"
-            detail="Learn about the community"
-            styles={styles}
-            colors={colors}
-          />
+        <Text style={styles.groupLabel}>ON THIS DEVICE</Text>
+        <View style={styles.settingsInfo}>
+          <Icon name="phone-portrait-outline" color={colors.purple} size={20} />
+          <Text style={styles.settingsInfoText}>
+            Drafts, saved posts, and privacy controls are stored only on this device.
+          </Text>
         </View>
         <Text style={styles.groupLabel}>LOCAL DATA</Text>
         <Pressable
@@ -129,21 +116,6 @@ export function SettingsScreen({
   );
 }
 
-function StaticSetting({ icon, title, detail, styles, colors }) {
-  return (
-    <View style={styles.setting}>
-      <View style={styles.settingIcon}>
-        <Icon name={icon} color={colors.purple} size={16} />
-      </View>
-      <View style={[styles.flex, styles.personCopy]}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        <Text style={styles.mutedSmall}>{detail}</Text>
-      </View>
-      <Icon name="chevron-forward" color={colors.muted} size={20} />
-    </View>
-  );
-}
-
 function SettingToggle({ value, onChange, label, styles }) {
   return (
     <Pressable
@@ -152,7 +124,7 @@ function SettingToggle({ value, onChange, label, styles }) {
       accessibilityState={{ checked: value }}
       hitSlop={8}
       onPress={() => onChange(!value)}
-      style={[styles.settingToggle, value && styles.settingToggleOn]}
+      style={({ pressed }) => [styles.settingToggle, value && styles.settingToggleOn, pressed && styles.pressed]}
     >
       <View
         style={[

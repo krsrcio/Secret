@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, SafeAreaView, View } from "react-native";
+import { Animated, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Brand } from "./Brand";
 
 export function Skeleton({ width = "100%", height = 14, style, styles }) {

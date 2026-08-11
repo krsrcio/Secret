@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Avatar } from "./Avatar";
 import { Empty, Icon } from "./Ui";
+import { MediaAttachments } from "./MediaAttachments";
 import { VoiceMessage } from "./VoiceMessage";
 import { formatRelativeTime } from "../utils/formatDate";
 import { formatDuration } from "../utils/formatDuration";
@@ -19,6 +20,14 @@ import { nameOf, postText, responsesOf } from "../utils/presentation";
 import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
 
 export function ReplySheet({
+  post,
+  ...props
+}) {
+  if (!post) return null;
+  return <ReplySheetContent key={String(post.id)} post={post} {...props} />;
+}
+
+function ReplySheetContent({
   post,
   currentUser,
   onClose,
@@ -168,14 +177,29 @@ export function ReplySheet({
   );
 }
 
-export function PostEditorSheet({ post, onClose, onSave, styles, colors }) {
-  const [question, setQuestion] = useState("");
-  useEffect(() => {
-    setQuestion(post ? postText(post) : "");
-  }, [post]);
-  if (!post) return null;
+export function PostEditorSheet(props) {
+  if (!props.post) return null;
+  return <PostEditorContent key={String(props.post.id)} {...props} />;
+}
+
+function PostEditorContent({ post, onClose, onSave, onPickPhoto, onError, styles, colors }) {
+  const [question, setQuestion] = useState(postText(post));
+  const [imageUrl, setImageUrl] = useState(post.imageUrl || null);
+  const {
+    voiceUrl,
+    voiceDurationMs,
+    isRecording,
+    recordingDurationMs,
+    toggleRecording,
+    discardVoice,
+  } = useVoiceRecorder(onError, post);
+  const canSave = Boolean(question.trim() || imageUrl || voiceUrl) && !isRecording;
   const save = async () => {
-    if (await onSave(post.id, question)) onClose();
+    if (await onSave(post.id, { question, imageUrl, audioUrl: voiceUrl, audioDurationMs: voiceDurationMs })) onClose();
+  };
+  const choosePhoto = async () => {
+    const selected = await onPickPhoto();
+    if (selected) setImageUrl(selected);
   };
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -206,14 +230,41 @@ export function PostEditorSheet({ post, onClose, onSave, styles, colors }) {
               placeholderTextColor={colors.muted}
               autoFocus
             />
+            <MediaAttachments
+              imageUrl={imageUrl}
+              audioUrl={voiceUrl}
+              audioDurationMs={voiceDurationMs}
+              onRemoveImage={() => setImageUrl(null)}
+              onRemoveAudio={discardVoice}
+              imageStyle={styles.editorImage}
+              wrapperStyle={styles.composerImageWrap}
+              styles={styles}
+              colors={colors}
+            />
+            {isRecording && (
+              <View style={styles.recordingIndicator}>
+                <Icon name="mic" color={colors.danger} size={16} />
+                <Text style={styles.recordingText}>
+                  Recording {formatDuration(recordingDurationMs)}
+                </Text>
+              </View>
+            )}
             <View style={styles.editorFooter}>
-              <Text style={styles.mutedSmall}>{question.length}/220</Text>
+              <View style={styles.editorAttachmentActions}>
+                <Pressable accessibilityLabel="Choose a post photo" onPress={choosePhoto} style={styles.editorMediaButton}>
+                  <Icon name="image-outline" color={colors.purple} size={18} />
+                </Pressable>
+                <Pressable accessibilityLabel={isRecording ? "Stop voice recording" : "Record a voice message"} onPress={toggleRecording} style={[styles.editorMediaButton, isRecording && styles.editorMediaButtonRecording]}>
+                  <Icon name={isRecording ? "stop" : "mic-outline"} color={isRecording ? colors.white : colors.purple} size={18} />
+                </Pressable>
+                <Text style={styles.mutedSmall}>{question.length}/220</Text>
+              </View>
               <Pressable
-                disabled={!question.trim()}
+                disabled={!canSave}
                 onPress={save}
                 style={[
                   styles.smallButton,
-                  !question.trim() && styles.disabled,
+                  !canSave && styles.disabled,
                 ]}
               >
                 <Text style={styles.smallButtonText}>Save changes</Text>

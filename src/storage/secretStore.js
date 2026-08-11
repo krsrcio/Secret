@@ -6,13 +6,19 @@ const MAX_USERNAME_LENGTH = 30;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_CONTENT_LENGTH = 220;
 const MAX_IMAGE_URL_LENGTH = 2048;
-const allowedPreferenceKeys = new Set(['darkMode', 'privateProfile']);
+const MAX_NAME_LENGTH = 50;
+const MAX_BIO_LENGTH = 180;
+const MAX_PRONOUNS_LENGTH = 40;
+const allowedPreferenceKeys = new Set(['darkMode', 'privateProfile', 'largeText']);
 
 const makeEmptyDatabase = () => ({
   users: [],
   posts: [],
   notifications: [],
   preferences: {},
+  drafts: {},
+  privacy: {},
+  onboarding: {},
 });
 
 const asArray = (value) => Array.isArray(value) ? value : [];
@@ -45,6 +51,13 @@ function validatedContent(value, label) {
   const text = String(value || '').trim();
   if (!text) throw new Error(`${label} cannot be empty.`);
   if (text.length > MAX_CONTENT_LENGTH) throw new Error(`${label} can be at most ${MAX_CONTENT_LENGTH} characters.`);
+  return text;
+}
+
+function profileText(value, label, maxLength, required = false) {
+  const text = String(value || '').trim();
+  if (required && !text) throw new Error(`${label} cannot be empty.`);
+  if (text.length > maxLength) throw new Error(`${label} can be at most ${maxLength} characters.`);
   return text;
 }
 
@@ -92,8 +105,23 @@ function requireUser(database, userId) {
   return user;
 }
 
+function privacyFor(database, userId) {
+  const value = database.privacy?.[userId] || {};
+  return {
+    mutedIds: asArray(value.mutedIds),
+    blockedIds: asArray(value.blockedIds),
+  };
+}
+
+function isHiddenByViewer(database, viewerId, targetUserId) {
+  if (!viewerId || viewerId === targetUserId) return false;
+  const privacy = privacyFor(database, viewerId);
+  return privacy.mutedIds.includes(targetUserId) || privacy.blockedIds.includes(targetUserId);
+}
+
 function canViewerSeeContent(database, targetUserId, viewerId) {
   if (targetUserId === viewerId) return true;
+  if (isHiddenByViewer(database, viewerId, targetUserId)) return false;
   const preferences = database.preferences[targetUserId] || {};
   if (!preferences.privateProfile) return true;
   const viewer = database.users.find((user) => user.id === viewerId);
@@ -112,6 +140,9 @@ async function readDatabase() {
       posts: asArray(parsed.posts),
       notifications: asArray(parsed.notifications),
       preferences: parsed.preferences || {},
+      drafts: parsed.drafts || {},
+      privacy: parsed.privacy || {},
+      onboarding: parsed.onboarding || {},
     };
   } catch {
     throw new Error('Your saved local data could not be read. Clear local app data to start again.');
@@ -126,6 +157,7 @@ function publicUser(database, user, viewerId) {
   const viewerFollowingIds = asArray(database.users.find((item) => item.id === viewerId)?.followingIds);
   const followersCount = database.users.filter((item) => asArray(item.followingIds).includes(user.id)).length;
   const isPrivate = Boolean(database.preferences[user.id]?.privateProfile);
+  const viewerPrivacy = privacyFor(database, viewerId);
   return {
     id: user.id,
     username: user.username,
@@ -140,6 +172,8 @@ function publicUser(database, user, viewerId) {
     isFollowing: viewerId ? viewerFollowingIds.includes(user.id) : false,
     viewerIsFollowing: viewerId ? viewerFollowingIds.includes(user.id) : false,
     isPrivate,
+    isMuted: viewerPrivacy.mutedIds.includes(user.id),
+    isBlocked: viewerPrivacy.blockedIds.includes(user.id),
     canViewContent: canViewerSeeContent(database, user.id, viewerId),
   };
 }
@@ -217,10 +251,12 @@ async function bootstrap(userId) {
     posts,
     trends: buildTrends(visiblePosts),
     suggestions: database.users
-      .filter((user) => user.id !== userId && !currentFollowing.includes(user.id))
+      .filter((user) => user.id !== userId && !currentFollowing.includes(user.id) && !isHiddenByViewer(database, userId, user.id))
       .map((user) => publicUser(database, user, userId)),
     notifications,
     preferences: database.preferences[userId] || {},
+    draft: database.drafts[userId] || null,
+    onboardingComplete: Boolean(database.onboarding[userId]),
     unreadNotificationCount: notifications.filter((notification) => !notification.read).length,
   };
 }
@@ -291,14 +327,51 @@ export const store = {
     });
   },
 
-  updatePost(userId, postId, question) {
+  updatePost(userId, postId, changes) {
     return enqueueMutation(async () => {
       const database = await readDatabase();
       requireUser(database, userId);
       const post = database.posts.find((item) => item.id === postId);
       if (!post || post.authorId !== userId) throw new Error('You can only edit your own posts.');
-      post.question = validatedContent(question, 'A post');
+      const next = validatedPost(changes?.question, changes?.imageUrl, changes?.audioUrl, changes?.audioDurationMs);
+      post.question = next.text;
+      post.imageUrl = next.imageUrl;
+      post.audioUrl = next.audioUrl;
+      post.audioDurationMs = next.audioDurationMs;
       post.updatedAt = new Date().toISOString();
+      await writeDatabase(database);
+    });
+  },
+
+  getPostDraft(userId) {
+    return readDatabase().then((database) => {
+      requireUser(database, userId);
+      return database.drafts[userId] || null;
+    });
+  },
+
+  savePostDraft(userId, draft) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      const text = String(draft?.question || '').trim();
+      const imageUrl = optionalMediaUrl(draft?.imageUrl, 'draft photo');
+      const audio = validatedAudio(draft?.audioUrl, draft?.audioDurationMs);
+      if (!text && !imageUrl && !audio.audioUrl) {
+        delete database.drafts[userId];
+      } else {
+        if (text.length > MAX_CONTENT_LENGTH) throw new Error(`A draft can be at most ${MAX_CONTENT_LENGTH} characters.`);
+        database.drafts[userId] = { question: text, imageUrl, ...audio, updatedAt: new Date().toISOString() };
+      }
+      await writeDatabase(database);
+    });
+  },
+
+  clearPostDraft(userId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      delete database.drafts[userId];
       await writeDatabase(database);
     });
   },
@@ -384,8 +457,52 @@ export const store = {
     return enqueueMutation(async () => {
       const database = await readDatabase();
       const user = requireUser(database, userId);
-      const avatarUrl = typeof changes?.avatarUrl === 'string' ? changes.avatarUrl.trim() : '';
-      user.avatarUrl = optionalMediaUrl(avatarUrl, 'profile photo');
+      if (Object.hasOwn(changes || {}, 'avatarUrl')) user.avatarUrl = optionalMediaUrl(changes.avatarUrl, 'profile photo');
+      if (Object.hasOwn(changes || {}, 'name')) user.name = profileText(changes.name, 'Display name', MAX_NAME_LENGTH, true);
+      if (Object.hasOwn(changes || {}, 'bio')) user.bio = profileText(changes.bio, 'Bio', MAX_BIO_LENGTH);
+      if (Object.hasOwn(changes || {}, 'pronouns')) user.pronouns = profileText(changes.pronouns, 'Pronouns', MAX_PRONOUNS_LENGTH);
+      await writeDatabase(database);
+    });
+  },
+
+  toggleMute(userId, targetUserId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      if (userId === targetUserId) throw new Error('You cannot mute your own profile.');
+      requireUser(database, targetUserId);
+      const privacy = privacyFor(database, userId);
+      database.privacy[userId] = {
+        ...privacy,
+        mutedIds: privacy.mutedIds.includes(targetUserId) ? privacy.mutedIds.filter((id) => id !== targetUserId) : [...privacy.mutedIds, targetUserId],
+      };
+      await writeDatabase(database);
+    });
+  },
+
+  toggleBlock(userId, targetUserId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      const viewer = requireUser(database, userId);
+      if (userId === targetUserId) throw new Error('You cannot block your own profile.');
+      requireUser(database, targetUserId);
+      const privacy = privacyFor(database, userId);
+      const blocked = privacy.blockedIds.includes(targetUserId);
+      database.privacy[userId] = {
+        ...privacy,
+        blockedIds: blocked ? privacy.blockedIds.filter((id) => id !== targetUserId) : [...privacy.blockedIds, targetUserId],
+        mutedIds: privacy.mutedIds.filter((id) => id !== targetUserId),
+      };
+      if (!blocked) viewer.followingIds = asArray(viewer.followingIds).filter((id) => id !== targetUserId);
+      await writeDatabase(database);
+    });
+  },
+
+  completeOnboarding(userId) {
+    return enqueueMutation(async () => {
+      const database = await readDatabase();
+      requireUser(database, userId);
+      database.onboarding[userId] = true;
       await writeDatabase(database);
     });
   },
