@@ -26,12 +26,12 @@ export default function App() {
 
   return <SafeAreaView style={styles.app}>
     <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.page} />
-    {app.screen === 'home' && <HomeScreen data={app.data} onNavigate={app.setScreen} onOpenPost={app.setSelectedPost} onOpenProfile={app.openProfile} onCreatePost={app.createPost} onPickPostImage={app.pickPostImage} onFavorite={app.favorite} onEditPost={app.setEditingPost} onDeletePost={app.deletePost} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
+    {app.screen === 'home' && <HomeScreen data={app.data} onNavigate={app.setScreen} onOpenPost={app.setSelectedPost} onOpenProfile={app.openProfile} onCreatePost={app.createPost} onPickPostImage={app.pickPostImage} onError={app.setError} onFavorite={app.favorite} onEditPost={app.setEditingPost} onDeletePost={app.deletePost} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'discover' && <DiscoverScreen data={app.data} onNavigate={app.setScreen} onOpenProfile={app.openProfile} onSettings={() => app.setScreen('settings')} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'notifications' && <NotificationsScreen data={app.data} onNavigate={app.setScreen} onOpenProfile={app.openProfile} onSettings={() => app.setScreen('settings')} onReadAll={app.readAll} onRefresh={app.reload} styles={styles} colors={colors} />}
     {app.screen === 'settings' && <SettingsScreen currentUser={app.data.currentUser} preferences={app.data.preferences} onUpdate={app.updatePreferences} onBack={() => app.setScreen('home')} onPickAvatar={app.pickAvatar} onResetData={app.resetLocalData} onSignOut={app.signOut} styles={styles} colors={colors} />}
     {app.screen === 'profile' && <ProfileScreen profile={app.profile} currentUser={app.data.currentUser} onBack={() => app.setScreen('home')} onFollow={app.follow} onOpenPost={app.setSelectedPost} onFavorite={app.favorite} onEditPost={app.setEditingPost} onDeletePost={app.deletePost} styles={styles} colors={colors} />}
-    <ReplySheet post={app.selectedPost} currentUser={app.data.currentUser} onClose={() => app.setSelectedPost(null)} onReply={app.createResponse} styles={styles} colors={colors} />
+    <ReplySheet post={app.selectedPost} currentUser={app.data.currentUser} onClose={() => app.setSelectedPost(null)} onReply={app.createResponse} onError={app.setError} styles={styles} colors={colors} />
     <PostEditorSheet post={app.editingPost} onClose={() => app.setEditingPost(null)} onSave={app.savePostEdit} styles={styles} colors={colors} />
     {!!app.error && <ErrorBar message={app.error} onClose={() => app.setError('')} styles={styles} colors={colors} />}
   </SafeAreaView>;

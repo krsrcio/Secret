@@ -64,16 +64,17 @@ export function useAppController() {
     }
   };
 
-  const createPost = async ({ question, imageUrl } = {}) => {
+  const createPost = async ({ question, imageUrl, audioUrl, audioDurationMs } = {}) => {
     const text = String(question || '').trim();
-    if (!text && !imageUrl) return false;
-    return (await execute(async () => { await store.createPost(token, text, imageUrl); await refresh(token); })) !== null;
+    if (!text && !imageUrl && !audioUrl) return false;
+    return (await execute(async () => { await store.createPost(token, text, imageUrl, audioUrl, audioDurationMs); await refresh(token); })) !== null;
   };
 
-  const createResponse = async (postId, text) => {
-    if (!text.trim()) return false;
+  const createResponse = async (postId, { text, audioUrl, audioDurationMs } = {}) => {
+    const content = String(text || '').trim();
+    if (!content && !audioUrl) return false;
     return (await execute(async () => {
-      await store.createResponse(token, postId, text.trim());
+      await store.createResponse(token, postId, content, audioUrl, audioDurationMs);
       const next = await refresh(token);
       const updated = next.posts.find((post) => String(post.id) === String(postId));
       if (updated) setSelectedPost(updated);

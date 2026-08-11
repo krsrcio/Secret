@@ -12,27 +12,51 @@ import {
 } from "react-native";
 import { Avatar } from "./Avatar";
 import { Empty, Icon } from "./Ui";
+import { VoiceMessage } from "./VoiceMessage";
 import { formatRelativeTime } from "../utils/formatDate";
+import { formatDuration } from "../utils/formatDuration";
 import { nameOf, postText, responsesOf } from "../utils/presentation";
+import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
 
 export function ReplySheet({
   post,
   currentUser,
   onClose,
   onReply,
+  onError,
   styles,
   colors,
 }) {
   const [reply, setReply] = useState("");
+  const {
+    voiceUrl,
+    voiceDurationMs,
+    isRecording,
+    recordingDurationMs,
+    toggleRecording,
+    discardVoice,
+  } = useVoiceRecorder(onError);
   if (!post) return null;
   const author = post.author || post.user || {};
+  const canSend = Boolean(reply.trim() || voiceUrl) && !isRecording;
+
   const send = async () => {
-    if (await onReply(post.id, reply)) setReply("");
+    if (await onReply(post.id, { text: reply, audioUrl: voiceUrl, audioDurationMs: voiceDurationMs })) {
+      setReply("");
+      await discardVoice();
+    }
+  };
+  const close = async () => {
+    try {
+      await discardVoice();
+    } finally {
+      onClose();
+    }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={close}>
       <View style={styles.overlay}>
-        <Pressable style={styles.dismiss} onPress={onClose} />
+        <Pressable style={styles.dismiss} onPress={close} />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
@@ -40,7 +64,7 @@ export function ReplySheet({
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Responses</Text>
-              <Pressable onPress={onClose} style={styles.close}>
+              <Pressable onPress={close} style={styles.close}>
                 <Icon name="close" color={colors.purpleDark} size={20} />
               </Pressable>
             </View>
@@ -58,6 +82,14 @@ export function ReplySheet({
                     resizeMode="cover"
                   />
                 )}
+                {!!post.audioUrl && (
+                  <VoiceMessage
+                    uri={post.audioUrl}
+                    durationMs={post.audioDurationMs}
+                    styles={styles}
+                    colors={colors}
+                  />
+                )}
               </View>
             </View>
             <ScrollView
@@ -70,6 +102,7 @@ export function ReplySheet({
                     key={String(response.id || index)}
                     response={response}
                     styles={styles}
+                    colors={colors}
                   />
                 ))
               ) : (
@@ -80,24 +113,53 @@ export function ReplySheet({
                 />
               )}
             </ScrollView>
-            <View style={styles.replyInput}>
-              <Avatar person={currentUser} size={35} />
-              <TextInput
-                value={reply}
-                onChangeText={setReply}
-                multiline
-                maxLength={220}
-                style={styles.replyTextInput}
-                placeholder="Write a response"
-                placeholderTextColor={colors.muted}
-              />
-              <Pressable
-                disabled={!reply.trim()}
-                onPress={send}
-                style={[styles.send, !reply.trim() && styles.disabled]}
-              >
-                <Icon name="arrow-up" color={colors.white} size={19} />
-              </Pressable>
+            <View style={styles.replyComposer}>
+              {isRecording && (
+                <View style={styles.recordingIndicator}>
+                  <Icon name="mic" color={colors.danger} size={16} />
+                  <Text style={styles.recordingText}>
+                    Recording {formatDuration(recordingDurationMs)}
+                  </Text>
+                </View>
+              )}
+              {!!voiceUrl && (
+                <View style={styles.voiceDraft}>
+                  <VoiceMessage uri={voiceUrl} durationMs={voiceDurationMs} styles={styles} colors={colors} />
+                  <Pressable
+                    accessibilityLabel="Remove voice message"
+                    onPress={discardVoice}
+                    style={styles.voiceDiscard}
+                  >
+                    <Icon name="close" color={colors.purpleDark} size={17} />
+                  </Pressable>
+                </View>
+              )}
+              <View style={styles.replyInput}>
+                <Avatar person={currentUser} size={35} />
+                <TextInput
+                  value={reply}
+                  onChangeText={setReply}
+                  multiline
+                  maxLength={220}
+                  style={styles.replyTextInput}
+                  placeholder="Write a response"
+                  placeholderTextColor={colors.muted}
+                />
+                <Pressable
+                  accessibilityLabel={isRecording ? "Stop voice recording" : "Record a voice message"}
+                  onPress={toggleRecording}
+                  style={[styles.voiceRecord, isRecording && styles.voiceRecording]}
+                >
+                  <Icon name={isRecording ? "stop" : "mic-outline"} color={isRecording ? colors.white : colors.purple} size={18} />
+                </Pressable>
+                <Pressable
+                  disabled={!canSend}
+                  onPress={send}
+                  style={[styles.send, !canSend && styles.disabled]}
+                >
+                  <Icon name="arrow-up" color={colors.white} size={19} />
+                </Pressable>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -164,8 +226,9 @@ export function PostEditorSheet({ post, onClose, onSave, styles, colors }) {
   );
 }
 
-function Response({ response, styles }) {
+function Response({ response, styles, colors }) {
   const author = response.author || response.user || response;
+  const text = response.text || response.content || response.answer || "";
   return (
     <View style={styles.response}>
       <Avatar person={author} size={37} />
@@ -176,9 +239,15 @@ function Response({ response, styles }) {
             {formatRelativeTime(response.createdAt || response.time)}
           </Text>
         </View>
-        <Text style={styles.responseBody}>
-          {response.text || response.content || response.answer || ""}
-        </Text>
+        {!!text && <Text style={styles.responseBody}>{text}</Text>}
+        {!!response.audioUrl && (
+          <VoiceMessage
+            uri={response.audioUrl}
+            durationMs={response.audioDurationMs}
+            styles={styles}
+            colors={colors}
+          />
+        )}
       </View>
     </View>
   );

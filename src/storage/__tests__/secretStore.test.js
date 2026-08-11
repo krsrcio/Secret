@@ -67,4 +67,31 @@ describe('local store', () => {
     const data = await store.getBootstrap(userId);
     expect(data.posts[0]).toMatchObject({ question: '', imageUrl: 'file:///post-photo.jpg' });
   });
+
+  it('persists a voice-only post', async () => {
+    const userId = await createUser('podcaster');
+    await store.createPost(userId, '', null, 'file:///post-voice-note.m4a', 65000);
+
+    const data = await store.getBootstrap(userId);
+    expect(data.posts[0]).toMatchObject({
+      question: '',
+      audioUrl: 'file:///post-voice-note.m4a',
+      audioDurationMs: 65000,
+    });
+  });
+
+  it('persists a voice-only response', async () => {
+    const userId = await createUser('speaker');
+    await store.createPost(userId, 'Share an update');
+    const post = (await store.getBootstrap(userId)).posts[0];
+
+    await store.createResponse(userId, post.id, '', 'file:///voice-note.m4a', 4200);
+
+    const data = await store.getBootstrap(userId);
+    expect(data.posts[0].responses[0]).toMatchObject({
+      text: '',
+      audioUrl: 'file:///voice-note.m4a',
+      audioDurationMs: 4200,
+    });
+  });
 });

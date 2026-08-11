@@ -15,9 +15,16 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Secret to use your photos for your profile picture."
+          "photosPermission": "Allow Secret to use your photos for your profile picture and posts."
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Secret to record voice messages."
+        }
+      ],
+      "expo-asset"
     ]
   }
 }

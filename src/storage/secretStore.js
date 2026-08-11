@@ -48,7 +48,7 @@ function validatedContent(value, label) {
   return text;
 }
 
-function optionalImageUrl(value, label) {
+function optionalMediaUrl(value, label) {
   if (value === null || value === undefined || value === '') return null;
   const imageUrl = typeof value === 'string' ? value.trim() : '';
   if (!imageUrl || imageUrl.length > MAX_IMAGE_URL_LENGTH || !/^(?:file|content|https?):\/\/|^blob:/i.test(imageUrl)) {
@@ -57,12 +57,33 @@ function optionalImageUrl(value, label) {
   return imageUrl;
 }
 
-function validatedPost(question, imageUrl) {
+function validatedAudio(audioUrl, audioDurationMs) {
+  const safeAudioUrl = optionalMediaUrl(audioUrl, 'voice message');
+  const duration = Number(audioDurationMs);
+  return {
+    audioUrl: safeAudioUrl,
+    audioDurationMs: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0,
+  };
+}
+
+function validatedPost(question, imageUrl, audioUrl, audioDurationMs) {
   const text = String(question || '').trim();
-  const safeImageUrl = optionalImageUrl(imageUrl, 'post photo');
-  if (!text && !safeImageUrl) throw new Error('A post needs text or a photo.');
+  const safeImageUrl = optionalMediaUrl(imageUrl, 'post photo');
+  const audio = validatedAudio(audioUrl, audioDurationMs);
+  if (!text && !safeImageUrl && !audio.audioUrl) throw new Error('A post needs text, a photo, or a voice message.');
   if (text.length > MAX_CONTENT_LENGTH) throw new Error(`A post can be at most ${MAX_CONTENT_LENGTH} characters.`);
-  return { text, imageUrl: safeImageUrl };
+  return { text, imageUrl: safeImageUrl, ...audio };
+}
+
+function validatedResponse(text, audioUrl, audioDurationMs) {
+  const content = String(text || '').trim();
+  const audio = validatedAudio(audioUrl, audioDurationMs);
+  if (!content && !audio.audioUrl) throw new Error('A response needs text or a voice message.');
+  if (content.length > MAX_CONTENT_LENGTH) throw new Error(`A response can be at most ${MAX_CONTENT_LENGTH} characters.`);
+  return {
+    text: content,
+    ...audio,
+  };
 }
 
 function requireUser(database, userId) {
@@ -250,16 +271,18 @@ export const store = {
     return profileData(database, viewerId, targetUserId);
   },
 
-  createPost(userId, question, imageUrl = null) {
+  createPost(userId, question, imageUrl = null, audioUrl = null, audioDurationMs = 0) {
     return enqueueMutation(async () => {
       const database = await readDatabase();
       requireUser(database, userId);
-      const post = validatedPost(question, imageUrl);
+      const post = validatedPost(question, imageUrl, audioUrl, audioDurationMs);
       database.posts.unshift({
         id: makeId('post'),
         authorId: userId,
         question: post.text,
         imageUrl: post.imageUrl,
+        audioUrl: post.audioUrl,
+        audioDurationMs: post.audioDurationMs,
         createdAt: new Date().toISOString(),
         responses: [],
         favoriteUserIds: [],
@@ -291,16 +314,17 @@ export const store = {
     });
   },
 
-  createResponse(userId, postId, text) {
+  createResponse(userId, postId, text, audioUrl = null, audioDurationMs = 0) {
     return enqueueMutation(async () => {
       const database = await readDatabase();
       requireUser(database, userId);
       const post = database.posts.find((item) => item.id === postId);
       if (!post) throw new Error('This conversation is no longer available.');
+      const response = validatedResponse(text, audioUrl, audioDurationMs);
       post.responses = [...asArray(post.responses), {
         id: makeId('response'),
         authorId: userId,
-        text: validatedContent(text, 'A response'),
+        ...response,
         createdAt: new Date().toISOString(),
       }];
       createNotification(database, post.authorId, userId, 'replied to your question.');
@@ -361,7 +385,7 @@ export const store = {
       const database = await readDatabase();
       const user = requireUser(database, userId);
       const avatarUrl = typeof changes?.avatarUrl === 'string' ? changes.avatarUrl.trim() : '';
-      user.avatarUrl = optionalImageUrl(avatarUrl, 'profile photo');
+      user.avatarUrl = optionalMediaUrl(avatarUrl, 'profile photo');
       await writeDatabase(database);
     });
   },
